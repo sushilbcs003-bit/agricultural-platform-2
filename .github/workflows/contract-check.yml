@@ -1,0 +1,52 @@
+name: Contract Validation
+
+on:
+  pull_request:
+    paths:
+      - 'backend/openapi.yaml'
+      - 'backend/**/*.js'
+      - 'frontend/src/utils/api.js'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend/openapi.yaml'
+
+jobs:
+  validate-openapi:
+    name: Validate OpenAPI Specification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install OpenAPI CLI
+        run: npm install -g @apidevtools/swagger-cli
+      
+      - name: Validate OpenAPI Schema
+        run: |
+          cd backend
+          swagger-cli validate openapi.yaml
+        continue-on-error: false
+
+  # Future: Add contract tests
+  # contract-tests:
+  #   name: Contract Tests
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v3
+  #       with:
+  #         node-version: '18'
+  #     - name: Install dependencies
+  #       run: cd backend && npm ci
+  #     - name: Run contract tests
+  #       run: cd backend && npm test -- tests/contract.test.js
+
+
+
+

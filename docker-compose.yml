@@ -1,0 +1,159 @@
+name: agricultural-platform
+
+# Version: v2
+# Agricultural Platform - Multi-service Docker Compose Configuration
+# Services: PostgreSQL, Redis, Backend API, Frontend, AI Service, Jaeger Tracing
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: agricultural_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agricultural_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      # Named volume - PERSISTS data across container restarts/stops
+      # Data is only cleared if you run: docker compose down -v
+      - postgres_data:/var/lib/postgresql/data
+      # Init scripts - only runs on first database initialization
+      - ./database:/docker-entrypoint-initdb.d:ro
+    networks:
+      - agricultural_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d agricultural_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: agricultural_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - agricultural_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      tags:
+        - agricultural-backend:v2
+        - agricultural-backend:latest
+    container_name: agricultural_backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend/index.js:/app/index.js:ro
+      - ./backend/src:/app/src:ro
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - OTP_BYPASS=true
+      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/agricultural_platform
+      - REDIS_URL=redis://redis:6379
+      - AI_SERVICE_URL=http://ai-service:5000
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - OTEL_SERVICE_NAME=agricultural-backend
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - agricultural_network
+
+  # Frontend App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      tags:
+        - agricultural-frontend:v2
+        - agricultural-frontend:latest
+    container_name: agricultural_frontend
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:3001
+      - REACT_APP_OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+    depends_on:
+      - backend
+    networks:
+      - agricultural_network
+
+  # AI Quality Assessment Service
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+      tags:
+        - agricultural-ai-service:v2
+        - agricultural-ai-service:latest
+    container_name: agricultural_ai_service
+    restart: unless-stopped
+    ports:
+      - "5001:5000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MODEL_PATH=/app/models
+      - FLASK_ENV=production
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - agricultural_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Jaeger - Distributed Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: agricultural_jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # HTTP collector (Jaeger format)
+      - "4317:4317"    # OTLP gRPC receiver
+      - "4318:4318"    # OTLP HTTP receiver
+      - "6831:6831/udp"  # UDP agent
+      - "6832:6832/udp"  # UDP agent
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - agricultural_network
+
+volumes:
+  # Named volumes persist data even when containers are stopped/removed
+  # To clear data, explicitly remove: docker compose down -v
+  postgres_data:
+  redis_data:
+
+networks:
+  agricultural_network:
+    driver: bridge

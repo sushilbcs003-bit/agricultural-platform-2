@@ -1,0 +1,610 @@
+openapi: 3.0.3
+info:
+  title: Agricultural Platform API
+  description: API for connecting farmers with buyers and suppliers
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@agricultural-platform.com
+
+servers:
+  - url: http://localhost:3001
+    description: Development server
+  - url: https://api.agricultural-platform.com
+    description: Production server
+
+tags:
+  - name: Auth
+    description: Authentication and registration endpoints
+  - name: Users
+    description: User management endpoints
+  - name: Master Data
+    description: Master data endpoints (states, categories, etc.)
+  - name: Products
+    description: Product management endpoints
+  - name: Farmers
+    description: Farmer-specific endpoints
+
+paths:
+  /api/auth/check-phone:
+    post:
+      tags:
+        - Auth
+      summary: Check if phone number is registered
+      description: Checks if a phone number exists in the system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+91[6-9]\d{9}$'
+                  example: "+919876543210"
+      responses:
+        '200':
+          description: Phone check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckPhoneResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/auth/otp/request:
+    post:
+      tags:
+        - Auth
+      summary: Request OTP
+      description: Sends OTP to the provided phone number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+91[6-9]\d{9}$'
+                  example: "+919876543210"
+                purpose:
+                  type: string
+                  enum: [LOGIN, REGISTRATION]
+                  default: LOGIN
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OTPRequestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/auth/otp/verify:
+    post:
+      tags:
+        - Auth
+      summary: Verify OTP
+      description: Verifies the OTP code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+                - otp
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+91[6-9]\d{9}$'
+                  example: "+919876543210"
+                otp:
+                  type: string
+                  pattern: '^\d{6}$'
+                  example: "123456"
+      responses:
+        '200':
+          description: OTP verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OTPVerifyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/auth/register/farmer:
+    post:
+      tags:
+        - Auth
+      summary: Register a new farmer
+      description: Creates a new farmer account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FarmerRegistrationRequest'
+      responses:
+        '201':
+          description: Farmer registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FarmerRegistrationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/auth/register/buyer:
+    post:
+      tags:
+        - Auth
+      summary: Register a new buyer
+      description: Creates a new buyer account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuyerRegistrationRequest'
+      responses:
+        '201':
+          description: Buyer registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerRegistrationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/auth/register/supplier:
+    post:
+      tags:
+        - Auth
+      summary: Register a new supplier
+      description: Creates a new supplier account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierRegistrationRequest'
+      responses:
+        '201':
+          description: Supplier registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierRegistrationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/users:
+    get:
+      tags:
+        - Users
+      summary: Get all users
+      description: Retrieves a list of all users with optional filtering
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [FARMER, BUYER, SUPPLIER]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersResponse'
+
+  /api/master-data:
+    get:
+      tags:
+        - Master Data
+      summary: Get master data
+      description: Retrieves master data (states, categories, enums, etc.)
+      responses:
+        '200':
+          description: Master data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterDataResponse'
+
+components:
+  schemas:
+    CheckPhoneResponse:
+      type: object
+      required:
+        - success
+        - exists
+        - phone
+      properties:
+        success:
+          type: boolean
+        exists:
+          type: boolean
+        phone:
+          type: string
+
+    OTPRequestResponse:
+      type: object
+      required:
+        - success
+        - message
+        - phone
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        phone:
+          type: string
+        otp:
+          type: string
+          description: OTP code (only in development)
+
+    OTPVerifyResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+        token:
+          type: string
+        newUser:
+          type: boolean
+        phone:
+          type: string
+
+    FarmerRegistrationRequest:
+      type: object
+      required:
+        - phone
+        - name
+        - aadhaar
+        - district
+        - state
+      properties:
+        phone:
+          type: string
+          pattern: '^\+91[6-9]\d{9}$'
+        name:
+          type: string
+        aadhaar:
+          type: string
+        email:
+          type: string
+          format: email
+        dateOfBirth:
+          type: string
+          format: date
+        village:
+          type: string
+        tehsil:
+          type: string
+        district:
+          type: string
+        state:
+          type: string
+        pincode:
+          type: string
+        landAreaValue:
+          type: number
+        landAreaUnit:
+          type: string
+          enum: [BIGHA, HECTARE, ACRE]
+        mainRoadConnectivity:
+          type: boolean
+        irrigationSource:
+          type: string
+          enum: [canal, borewell, rainfed]
+        ownershipType:
+          type: string
+          enum: [owned, leased]
+        about:
+          type: string
+
+    FarmerRegistrationResponse:
+      type: object
+      required:
+        - success
+        - user
+        - token
+        - message
+      properties:
+        success:
+          type: boolean
+        user:
+          $ref: '#/components/schemas/User'
+        token:
+          type: string
+        message:
+          type: string
+
+    BuyerRegistrationRequest:
+      type: object
+      required:
+        - gst
+        - businessName
+        - email
+        - password
+        - district
+        - state
+      properties:
+        gst:
+          type: string
+        businessName:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        phone:
+          type: string
+        businessAddress:
+          type: string
+        village:
+          type: string
+        tehsil:
+          type: string
+        district:
+          type: string
+        state:
+          type: string
+        pincode:
+          type: string
+        contactPerson:
+          type: string
+
+    BuyerRegistrationResponse:
+      type: object
+      required:
+        - success
+        - user
+        - message
+      properties:
+        success:
+          type: boolean
+        user:
+          $ref: '#/components/schemas/User'
+        message:
+          type: string
+
+    SupplierRegistrationRequest:
+      type: object
+      required:
+        - organizationName
+        - email
+        - password
+        - phone
+        - supplierTypes
+      properties:
+        organizationName:
+          type: string
+        contactName:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        phone:
+          type: string
+        gstNumber:
+          type: string
+        businessAddress:
+          type: string
+        village:
+          type: string
+        tehsil:
+          type: string
+        district:
+          type: string
+        state:
+          type: string
+        pincode:
+          type: string
+        supplierTypes:
+          type: array
+          items:
+            type: string
+            enum: [MACHINERY, TRANSPORT, TESTING, SEEDS, FERTILIZERS]
+
+    SupplierRegistrationResponse:
+      type: object
+      required:
+        - success
+        - user
+        - token
+        - message
+      properties:
+        success:
+          type: boolean
+        user:
+          $ref: '#/components/schemas/User'
+        token:
+          type: string
+        message:
+          type: string
+
+    User:
+      type: object
+      required:
+        - id
+        - role
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [FARMER, BUYER, SUPPLIER, ADMIN]
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        farmerProfile:
+          $ref: '#/components/schemas/FarmerProfile'
+        buyerProfile:
+          $ref: '#/components/schemas/BuyerProfile'
+        supplierProfile:
+          $ref: '#/components/schemas/SupplierProfile'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FarmerProfile:
+      type: object
+      properties:
+        village:
+          type: string
+        district:
+          type: string
+        state:
+          type: string
+        landAreaValue:
+          type: number
+        landAreaUnit:
+          type: string
+
+    BuyerProfile:
+      type: object
+      properties:
+        gst:
+          type: string
+        businessName:
+          type: string
+        district:
+          type: string
+        state:
+          type: string
+
+    SupplierProfile:
+      type: object
+      properties:
+        organizationName:
+          type: string
+        supplierTypes:
+          type: array
+          items:
+            type: string
+
+    UsersResponse:
+      type: object
+      required:
+        - success
+        - users
+        - total
+      properties:
+        success:
+          type: boolean
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total:
+          type: integer
+        farmers:
+          type: integer
+        buyers:
+          type: integer
+
+    MasterDataResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            states:
+              type: array
+              items:
+                type: object
+                properties:
+                  value:
+                    type: string
+                  label:
+                    type: string
+                  hindi:
+                    type: string
+            productCategories:
+              type: object
+            irrigationSources:
+              type: array
+              items:
+                type: object
+            ownershipTypes:
+              type: array
+              items:
+                type: object
+            landUnits:
+              type: array
+              items:
+                type: object
+
+    Error:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+
+
+

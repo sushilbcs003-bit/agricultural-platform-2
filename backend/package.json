@@ -1,0 +1,29 @@
+{
+  "name": "agricultural-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "prisma": "prisma",
+    "migrate": "prisma migrate dev",
+    "generate": "prisma generate",
+    "validate-openapi": "swagger-cli validate openapi.yaml"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "express-rate-limit": "^7.1.5",
+    "@prisma/client": "^5.0.0",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "@opentelemetry/api": "^1.7.0",
+    "@opentelemetry/sdk-node": "^0.45.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.40.0",
+    "@opentelemetry/exporter-jaeger": "^1.15.0",
+    "@opentelemetry/resources": "^1.15.0",
+    "@opentelemetry/semantic-conventions": "^1.15.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.0.0"
+  }
+}

@@ -1,0 +1,883 @@
+// ==========================================================
+// Prisma Schema - 3NF+ Database Design
+// Agricultural Trading Platform
+// Matches schema-3nf.sql database structure
+// ==========================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================================
+// ENUMS
+// ==========================================================
+
+enum UserRole {
+  FARMER
+  BUYER
+  SUPPLIER
+  ADMIN
+
+  @@map("user_role")
+}
+
+enum OtpPurpose {
+  LOGIN
+  REGISTER
+  PHONE_VERIFY
+
+  @@map("otp_purpose")
+}
+
+enum SupplierTypeCode {
+  FARMING_MACHINERY
+  TRANSPORT_MACHINERY
+  LABOUR_SERVICES
+
+  @@map("supplier_type_code")
+}
+
+enum ProductUnit {
+  KG
+  QUINTAL
+  TON
+  LITER
+  PIECE
+  OTHER
+
+  @@map("product_unit")
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  SUSPENDED
+  SOLD_OUT
+
+  @@map("product_status")
+}
+
+enum BidStatus {
+  PLACED
+  ACCEPTED
+  REJECTED
+  COUNTERED
+  EXPIRED
+  WITHDRAWN
+
+  @@map("bid_status")
+}
+
+enum CartStatus {
+  ACTIVE
+  CHECKED_OUT
+  ABANDONED
+
+  @@map("cart_status")
+}
+
+enum CartItemType {
+  PRODUCT
+  SERVICE
+
+  @@map("cart_item_type")
+}
+
+enum OrderType {
+  PRODUCE
+  SERVICE
+  MIXED
+
+  @@map("order_type")
+}
+
+enum OrderStatus {
+  CREATED
+  FINALIZED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("order_status")
+}
+
+enum PaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+
+  @@map("payment_status")
+}
+
+enum PaymentTxnStatus {
+  INITIATED
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+
+  @@map("payment_txn_status")
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  UPI
+  WALLET
+  CARD
+  CASH
+  OTHER
+
+  @@map("payment_method")
+}
+
+enum OrderItemStatus {
+  CREATED
+  ACCEPTED
+  REJECTED
+  FULFILLED
+  CANCELLED
+
+  @@map("order_item_status")
+}
+
+enum ServiceItemStatus {
+  CREATED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("service_item_status")
+}
+
+enum AreaUnit {
+  ACRE
+  HECTARE
+  SQM
+  BISWA
+  OTHER
+
+  @@map("area_unit")
+}
+
+// Additional enums that exist in database (quoted names in schema-3nf)
+enum LandAreaUnit {
+  BIGHA
+  HECTARE
+  ACRE
+
+  @@map("LandAreaUnit")
+}
+
+enum IrrigationSource {
+  RAINWATER
+  TUBE_WELL
+  CANAL
+  RIVER
+  POND
+  OTHER
+
+  @@map("IrrigationSource")
+}
+
+enum OwnershipType {
+  OWNED
+  LEASED
+  SHARED
+
+  @@map("OwnershipType")
+}
+
+enum MachineryCategoryCode {
+  FARMING
+  TRANSPORT
+
+  @@map("machinery_category_code")
+}
+
+enum MachineryAvailability {
+  AVAILABLE
+  LIMITED
+  UNAVAILABLE
+  MAINTENANCE
+
+  @@map("machinery_availability")
+}
+
+enum PayoutMethod {
+  BANK
+  UPI
+  WALLET
+
+  @@map("payout_method")
+}
+
+// ==========================================================
+// CORE MODELS
+// ==========================================================
+
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String   @db.VarChar(200)
+  role          UserRole
+  phone         String   @unique @db.VarChar(20)
+  phoneVerified Boolean  @default(false) @map("phone_verified")
+  email         String?  @unique @db.VarChar(255)
+  emailVerified Boolean  @default(false) @map("email_verified")
+  aadhaarEncrypted String? @map("aadhaar_encrypted") @db.Text
+  gstNumber     String?  @unique @map("gst_number") @db.VarChar(30)
+  passwordHash  String?  @map("password_hash") @db.Text
+  dateOfBirth   DateTime? @map("date_of_birth") @db.Date
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  farmerProfile    FarmerProfile?
+  buyerProfile     BuyerProfile?
+  supplierProfile  SupplierProfile?
+  paymentProfile   PaymentProfile?
+  otpRequests      OtpRequest[]
+  carts            Cart[]
+  serviceOrders     ServiceOrderItem[] @relation("RequesterOrders")
+  paymentAuditAsUser PaymentProfileAudit[] @relation("UserAudit")
+  paymentAuditAsChangedBy PaymentProfileAudit[] @relation("ChangedByAudit")
+
+  @@map("users")
+}
+
+model OtpRequest {
+  id         String     @id @default(uuid()) @db.Uuid
+  userId     String?    @map("user_id") @db.Uuid
+  phone      String     @db.VarChar(20)
+  gstNumber  String?    @map("gst_number") @db.VarChar(30)
+  purpose    OtpPurpose
+  otpHash    String     @map("otp_hash") @db.Text
+  expiresAt  DateTime   @map("expires_at") @db.Timestamptz
+  verifiedAt DateTime?  @map("verified_at") @db.Timestamptz
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([phone, purpose, createdAt(sort: Desc)])
+  @@index([gstNumber, purpose, createdAt(sort: Desc)])
+  @@map("otp_requests")
+}
+
+// ==========================================================
+// LOCATION HIERARCHY
+// ==========================================================
+
+model Country {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(100)
+  isoCode   String?  @map("iso_code") @db.VarChar(10)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  states   State[]
+  addresses Address[]
+
+  @@map("countries")
+}
+
+model State {
+  id         String   @id @default(uuid()) @db.Uuid
+  countryId  String   @map("country_id") @db.Uuid
+  name       String   @db.VarChar(120)
+  lgdCode    String?  @map("lgd_code") @db.VarChar(30)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  country   Country    @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  districts District[]
+  addresses Address[]
+
+  @@unique([countryId, name])
+  @@map("states")
+}
+
+model District {
+  id         String   @id @default(uuid()) @db.Uuid
+  stateId    String   @map("state_id") @db.Uuid
+  name       String   @db.VarChar(120)
+  lgdCode    String?  @map("lgd_code") @db.VarChar(30)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  state   State    @relation(fields: [stateId], references: [id], onDelete: Restrict)
+  tehsils Tehsil[]
+  addresses Address[]
+
+  @@unique([stateId, name])
+  @@map("districts")
+}
+
+model Tehsil {
+  id         String   @id @default(uuid()) @db.Uuid
+  districtId String   @map("district_id") @db.Uuid
+  name       String   @db.VarChar(120)
+  lgdCode    String?  @map("lgd_code") @db.VarChar(30)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  district District  @relation(fields: [districtId], references: [id], onDelete: Restrict)
+  villages Village[]
+  addresses Address[]
+
+  @@unique([districtId, name])
+  @@map("tehsils")
+}
+
+model Village {
+  id         String   @id @default(uuid()) @db.Uuid
+  tehsilId   String   @map("tehsil_id") @db.Uuid
+  name       String   @db.VarChar(160)
+  lgdCode    String?  @map("lgd_code") @db.VarChar(30)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tehsil    Tehsil     @relation(fields: [tehsilId], references: [id], onDelete: Restrict)
+  addresses Address[]
+
+  @@unique([tehsilId, name])
+  @@index([name])
+  @@index([lgdCode])
+  @@map("villages")
+}
+
+model Address {
+  id          String    @id @default(uuid()) @db.Uuid
+  countryId   String    @map("country_id") @db.Uuid
+  stateId    String?   @map("state_id") @db.Uuid
+  districtId  String?   @map("district_id") @db.Uuid
+  tehsilId    String?   @map("tehsil_id") @db.Uuid
+  villageId   String?   @map("village_id") @db.Uuid
+  line1       String?   @db.VarChar(255)
+  line2       String?   @db.VarChar(255)
+  pincode     String?   @db.VarChar(20)
+  latitude    Decimal?  @db.Decimal(10, 7)
+  longitude   Decimal?  @db.Decimal(10, 7)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  country  Country   @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  state    State?    @relation(fields: [stateId], references: [id], onDelete: SetNull)
+  district District? @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  tehsil   Tehsil?   @relation(fields: [tehsilId], references: [id], onDelete: SetNull)
+  village  Village?  @relation(fields: [villageId], references: [id], onDelete: SetNull)
+  
+  // Multiple relations to Address
+  farmerPrimaryAddresses FarmerProfile[] @relation("FarmerPrimaryAddress")
+  buyerAddresses         BuyerProfile[] @relation("BuyerAddress")
+  supplierAddresses      SupplierProfile[] @relation("SupplierAddress")
+  farmerLocationAddresses FarmerLocation[] @relation("FarmerLocationAddress")
+  landAddresses          LandRecord[] @relation("LandAddress")
+  machineryCoverageAddresses SupplierMachineryInventory[] @relation("MachineryCoverage")
+
+  @@map("addresses")
+}
+
+// ==========================================================
+// ROLE PROFILES
+// ==========================================================
+
+model FarmerProfile {
+  userId              String            @id @map("user_id") @db.Uuid
+  // Legacy fields that exist in actual database
+  village             String?           @db.VarChar(100)
+  tehsil              String?           @db.VarChar(100)
+  district            String            @db.VarChar(100)
+  state               String            @db.VarChar(100)
+  pincode             String?           @db.VarChar(10)
+  about               String?           @db.Text
+  mainRoadConnectivity Boolean          @default(false) @map("main_road_connectivity")
+  landAreaValue       Decimal?          @map("land_area_value") @db.Decimal(10, 2)
+  landAreaUnit        LandAreaUnit?     @map("land_area_unit")
+  irrigationSource    IrrigationSource? @map("irrigation_source")
+  ownershipType       OwnershipType?    @map("ownership_type")
+  profileImageUrl     String?           @map("profile_image_url") @db.Text
+  // New normalized fields (for future migration)
+  fullName            String?           @map("full_name") @db.VarChar(200)
+  aadhaarEnc          Bytes?            @map("aadhaar_enc") @db.ByteA
+  aadhaarLast4        String?           @map("aadhaar_last4") @db.VarChar(4)
+  dob                 DateTime?         @db.Date
+  primaryAddressId    String?           @map("primary_address_id") @db.Uuid
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  primaryAddress    Address?  @relation("FarmerPrimaryAddress", fields: [primaryAddressId], references: [id], onDelete: SetNull)
+  locations         FarmerLocation[]
+  lands             LandRecord[]
+  products          Product[]
+  bids              Bid[]
+  shortlists        BuyerShortlist[]
+  qualityTests      QualityTestReport[]
+  orderItems        OrderItem[]
+  orders            Order[] @relation("FarmerOrders")
+
+  @@map("farmer_profiles")
+}
+
+model BuyerProfile {
+  userId         String    @id @map("user_id") @db.Uuid
+  fullName       String    @map("full_name") @db.VarChar(200)
+  aadhaarEnc     Bytes?    @map("aadhaar_enc") @db.ByteA
+  aadhaarLast4   String?   @map("aadhaar_last4") @db.VarChar(4)
+  dob            DateTime  @db.Date
+  businessName   String    @map("business_name") @db.VarChar(250)
+  gstNumber      String    @unique @map("gst_number") @db.VarChar(30)
+  businessDomain String?   @map("business_domain") @db.VarChar(200)
+  website        String?   @db.VarChar(255)
+  addressId      String?   @map("address_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address    Address?        @relation("BuyerAddress", fields: [addressId], references: [id], onDelete: SetNull)
+  bids       Bid[]
+  shortlists BuyerShortlist[]
+  orders     Order[] @relation("BuyerOrders")
+
+  @@map("buyer_profiles")
+}
+
+model SupplierProfile {
+  userId           String    @id @map("user_id") @db.Uuid
+  organizationName String    @map("organization_name") @db.VarChar(250)
+  contactName      String    @map("contact_name") @db.VarChar(200)
+  gstNumber        String    @unique @map("gst_number") @db.VarChar(30)
+  website          String?   @db.VarChar(255)
+  addressId        String?   @map("address_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address           Address?                @relation("SupplierAddress", fields: [addressId], references: [id], onDelete: SetNull)
+  supplierTypes     SupplierType[]
+  machineryInventory SupplierMachineryInventory[]
+  serviceOrders     ServiceOrderItem[]
+  orders            Order[] @relation("SupplierOrders")
+
+  @@map("supplier_profiles")
+}
+
+model SupplierTypeMaster {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      SupplierTypeCode @unique
+  name      String   @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  suppliers SupplierType[]
+
+  @@map("supplier_type_master")
+}
+
+model SupplierType {
+  supplierUserId  String   @map("supplier_user_id") @db.Uuid
+  supplierTypeId  String   @map("supplier_type_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  supplier    SupplierProfile    @relation(fields: [supplierUserId], references: [userId], onDelete: Cascade)
+  typeMaster  SupplierTypeMaster @relation(fields: [supplierTypeId], references: [id], onDelete: Restrict)
+
+  @@id([supplierUserId, supplierTypeId])
+  @@map("supplier_types")
+}
+
+// ==========================================================
+// FARMER DATA
+// ==========================================================
+
+model FarmerLocation {
+  id            String    @id @default(uuid()) @db.Uuid
+  farmerUserId  String    @map("farmer_user_id") @db.Uuid
+  label         String?   @db.VarChar(120)
+  addressId     String    @map("address_id") @db.Uuid
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  farmer  FarmerProfile @relation(fields: [farmerUserId], references: [userId], onDelete: Cascade)
+  address Address       @relation("FarmerLocationAddress", fields: [addressId], references: [id], onDelete: Restrict)
+
+  @@index([farmerUserId])
+  @@map("farmer_locations")
+}
+
+model LandRecord {
+  id            String        @id @default(uuid()) @db.Uuid
+  farmerUserId  String        @map("farmer_user_id") @db.Uuid
+  addressId     String        @map("address_id") @db.Uuid
+  khasraNumber  String?       @map("khasra_number") @db.VarChar(50)
+  landName      String?       @map("land_name") @db.VarChar(200)
+  areaValue     Decimal       @map("area_value") @db.Decimal(12, 3)
+  areaUnit      LandAreaUnit  @map("area_unit") // Use LandAreaUnit enum that exists in DB
+  notes         String?       @db.VarChar(255)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  farmer     FarmerProfile @relation(fields: [farmerUserId], references: [userId], onDelete: Cascade)
+  address    Address       @relation("LandAddress", fields: [addressId], references: [id], onDelete: Restrict)
+  orderItems OrderItem[]
+
+  @@index([farmerUserId])
+  @@map("land_records")
+}
+
+// ==========================================================
+// PRODUCTS
+// ==========================================================
+
+model Product {
+  id            String        @id @default(uuid()) @db.Uuid
+  farmerUserId  String        @map("farmer_user_id") @db.Uuid
+  name          String        @db.VarChar(200)
+  price         Decimal       @db.Decimal(12, 2)
+  unit          ProductUnit
+  stockQty      Decimal       @map("stock_qty") @db.Decimal(12, 3)
+  isAvailable   Boolean       @default(true) @map("is_available")
+  status        ProductStatus @default(PUBLISHED)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  farmer        FarmerProfile @relation(fields: [farmerUserId], references: [userId], onDelete: Cascade)
+  images        ProductImage[]
+  bids          Bid[]
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+  qualityTests  QualityTestReport[]
+
+  @@index([farmerUserId])
+  @@index([isAvailable, status])
+  @@map("products")
+}
+
+model ProductImage {
+  id         String   @id @default(uuid()) @db.Uuid
+  productId  String   @map("product_id") @db.Uuid
+  imageUrl   String   @map("image_url") @db.Text
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_images")
+}
+
+// ==========================================================
+// BIDS & SHORTLISTS
+// ==========================================================
+
+model Bid {
+  id            String    @id @default(uuid()) @db.Uuid
+  buyerUserId   String    @map("buyer_user_id") @db.Uuid
+  farmerUserId  String    @map("farmer_user_id") @db.Uuid
+  productId     String    @map("product_id") @db.Uuid
+  bidQuantity   Decimal   @map("bid_quantity") @db.Decimal(12, 3)
+  bidPrice      Decimal   @map("bid_price") @db.Decimal(12, 2)
+  message       String?   @db.Text
+  status        BidStatus @default(PLACED)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  buyer   BuyerProfile  @relation(fields: [buyerUserId], references: [userId], onDelete: Cascade)
+  farmer FarmerProfile @relation(fields: [farmerUserId], references: [userId], onDelete: Cascade)
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([buyerUserId, createdAt(sort: Desc)])
+  @@index([farmerUserId, createdAt(sort: Desc)])
+  @@index([productId])
+  @@map("bids")
+}
+
+model BuyerShortlist {
+  buyerUserId   String   @map("buyer_user_id") @db.Uuid
+  farmerUserId  String   @map("farmer_user_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  buyer  BuyerProfile  @relation(fields: [buyerUserId], references: [userId], onDelete: Cascade)
+  farmer FarmerProfile @relation(fields: [farmerUserId], references: [userId], onDelete: Cascade)
+
+  @@id([buyerUserId, farmerUserId])
+  @@map("buyer_shortlists")
+}
+
+// ==========================================================
+// MACHINERY
+// ==========================================================
+
+model MachineryCategoryMaster {
+  id   String                @id @default(uuid()) @db.Uuid
+  code MachineryCategoryCode @unique
+  name String                @db.VarChar(120)
+
+  types MachineryTypeMaster[]
+
+  @@map("machinery_category_master")
+}
+
+model MachineryTypeMaster {
+  id         String   @id @default(uuid()) @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  name       String   @db.VarChar(160)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  category  MachineryCategoryMaster @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  inventory SupplierMachineryInventory[]
+
+  @@unique([categoryId, name])
+  @@map("machinery_type_master")
+}
+
+model SupplierMachineryInventory {
+  id                 String                @id @default(uuid()) @db.Uuid
+  supplierUserId     String                @map("supplier_user_id") @db.Uuid
+  machineryTypeId    String                @map("machinery_type_id") @db.Uuid
+  quantity           Int
+  coverageAddressId String?                @map("coverage_address_id") @db.Uuid
+  coverageRadiusKm   Decimal?              @map("coverage_radius_km") @db.Decimal(8, 2)
+  availabilityStatus MachineryAvailability @default(AVAILABLE) @map("availability_status")
+  capacityTons       Decimal?              @map("capacity_tons") @db.Decimal(10, 2)
+  refrigeration      Boolean?
+  horsepower         Int?
+  suitableCrops      String?               @map("suitable_crops") @db.Text
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime              @updatedAt @map("updated_at") @db.Timestamptz
+
+  supplier      SupplierProfile    @relation(fields: [supplierUserId], references: [userId], onDelete: Cascade)
+  machineryType MachineryTypeMaster @relation(fields: [machineryTypeId], references: [id], onDelete: Restrict)
+  coverageAddress Address?         @relation("MachineryCoverage", fields: [coverageAddressId], references: [id], onDelete: SetNull)
+  cartItems       CartItem[]
+  serviceOrders   ServiceOrderItem[]
+
+  @@index([supplierUserId])
+  @@index([machineryTypeId])
+  @@index([availabilityStatus])
+  @@map("supplier_machinery_inventory")
+}
+
+// ==========================================================
+// CARTS
+// ==========================================================
+
+model Cart {
+  id           String     @id @default(uuid()) @db.Uuid
+  ownerUserId  String     @map("owner_user_id") @db.Uuid
+  status       CartStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  owner User       @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  @@unique([ownerUserId], name: "uq_carts_owner_active", map: "uq_carts_owner_active")
+  @@map("carts")
+}
+
+model CartItem {
+  id                   String        @id @default(uuid()) @db.Uuid
+  cartId               String        @map("cart_id") @db.Uuid
+  itemType             CartItemType  @map("item_type")
+  productId            String?       @map("product_id") @db.Uuid
+  machineryInventoryId  String?       @map("machinery_inventory_id") @db.Uuid
+  quantity             Decimal       @db.Decimal(12, 3)
+  unitPrice            Decimal?      @map("unit_price") @db.Decimal(12, 2)
+  metaJson             Json?        @map("meta_json") @db.JsonB
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  cart              Cart                      @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product           Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  machineryInventory SupplierMachineryInventory? @relation(fields: [machineryInventoryId], references: [id], onDelete: SetNull)
+
+  @@map("cart_items")
+}
+
+// ==========================================================
+// ORDERS & PAYMENTS
+// ==========================================================
+
+model Order {
+  id            String        @id @default(uuid()) @db.Uuid
+  orderNumber   String?       @unique @map("order_number") @db.VarChar(40)
+  buyerUserId   String?       @map("buyer_user_id") @db.Uuid
+  farmerUserId  String?       @map("farmer_user_id") @db.Uuid
+  supplierUserId String?      @map("supplier_user_id") @db.Uuid
+  orderType     OrderType     @map("order_type")
+  status        OrderStatus   @default(CREATED)
+  paymentStatus PaymentStatus @default(UNPAID) @map("payment_status")
+  deliveryDate  DateTime?     @map("delivery_date") @db.Date
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  buyer         BuyerProfile?     @relation("BuyerOrders", fields: [buyerUserId], references: [userId], onDelete: SetNull)
+  farmer        FarmerProfile?    @relation("FarmerOrders", fields: [farmerUserId], references: [userId], onDelete: SetNull)
+  supplier      SupplierProfile?  @relation("SupplierOrders", fields: [supplierUserId], references: [userId], onDelete: SetNull)
+  orderItems    OrderItem[]
+  serviceItems  ServiceOrderItem[]
+  payments      Payment[]
+
+  @@index([buyerUserId, createdAt(sort: Desc)])
+  @@index([farmerUserId, createdAt(sort: Desc)])
+  @@index([supplierUserId, createdAt(sort: Desc)])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id            String          @id @default(uuid()) @db.Uuid
+  orderId       String          @map("order_id") @db.Uuid
+  productId     String          @map("product_id") @db.Uuid
+  farmerUserId  String          @map("farmer_user_id") @db.Uuid
+  landRecordId  String?         @map("land_record_id") @db.Uuid
+  quantity      Decimal         @db.Decimal(12, 3)
+  unitPrice     Decimal         @map("unit_price") @db.Decimal(12, 2)
+  lineTotal     Decimal         @map("line_total") @db.Decimal(12, 2)
+  status        OrderItemStatus @default(CREATED)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  farmer     FarmerProfile @relation(fields: [farmerUserId], references: [userId], onDelete: Restrict)
+  landRecord LandRecord? @relation(fields: [landRecordId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([landRecordId])
+  @@map("order_items")
+}
+
+model ServiceOrderItem {
+  id                   String            @id @default(uuid()) @db.Uuid
+  orderId              String            @map("order_id") @db.Uuid
+  machineryInventoryId String            @map("machinery_inventory_id") @db.Uuid
+  supplierUserId       String            @map("supplier_user_id") @db.Uuid
+  requesterUserId      String            @map("requester_user_id") @db.Uuid
+  quantity             Int
+  serviceStatus        ServiceItemStatus @default(CREATED) @map("service_status")
+  notes                String?          @db.Text
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  order              Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  machineryInventory SupplierMachineryInventory @relation(fields: [machineryInventoryId], references: [id], onDelete: Restrict)
+  supplier           SupplierProfile          @relation(fields: [supplierUserId], references: [userId], onDelete: Restrict)
+  requester          User                     @relation("RequesterOrders", fields: [requesterUserId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([supplierUserId])
+  @@map("service_order_items")
+}
+
+model Payment {
+  id          String           @id @default(uuid()) @db.Uuid
+  orderId     String           @map("order_id") @db.Uuid
+  amount      Decimal          @db.Decimal(12, 2)
+  currency    String           @default("INR") @db.VarChar(3)
+  method      PaymentMethod?
+  provider    String?          @db.VarChar(80)
+  providerRef String?          @map("provider_ref") @db.VarChar(120)
+  status      PaymentTxnStatus
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("payments")
+}
+
+// ==========================================================
+// QUALITY TESTING
+// ==========================================================
+
+model QualityTestReport {
+  id              String   @id @default(uuid()) @db.Uuid
+  productId       String   @map("product_id") @db.Uuid
+  farmerUserId   String   @map("farmer_user_id") @db.Uuid
+  orderItemId    String?  @map("order_item_id") @db.Uuid
+  score           Decimal  @db.Decimal(6, 2)
+  grade           String   @db.VarChar(40)
+  testProvider    String   @map("test_provider") @db.VarChar(200)
+  recommendations String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  farmer     FarmerProfile   @relation(fields: [farmerUserId], references: [userId], onDelete: Cascade)
+  metrics    QualityTestMetric[]
+  images     QualityTestImage[]
+
+  @@index([productId])
+  @@map("quality_test_reports")
+}
+
+model QualityTestMetric {
+  id          String   @id @default(uuid()) @db.Uuid
+  reportId    String   @map("report_id") @db.Uuid
+  metricName  String   @map("metric_name") @db.VarChar(120)
+  metricValue String   @map("metric_value") @db.VarChar(120)
+  unit        String?  @db.VarChar(40)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  report QualityTestReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("quality_test_metrics")
+}
+
+model QualityTestImage {
+  id         String   @id @default(uuid()) @db.Uuid
+  reportId   String   @map("report_id") @db.Uuid
+  imageUrl   String   @map("image_url") @db.Text
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  report QualityTestReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("quality_test_images")
+}
+
+// ==========================================================
+// PAYMENT PROFILES
+// ==========================================================
+
+model PaymentProfile {
+  userId                String        @id @map("user_id") @db.Uuid
+  bankName              String?       @map("bank_name") @db.VarChar(200)
+  accountHolderName     String?       @map("account_holder_name") @db.VarChar(200)
+  accountNumberEnc      Bytes?        @map("account_number_enc") @db.ByteA
+  ifscCode              String?       @map("ifsc_code") @db.VarChar(20)
+  upiId                 String?       @map("upi_id") @db.VarChar(120)
+  paytmId               String?       @map("paytm_id") @db.VarChar(120)
+  bharatpeId            String?       @map("bharatpe_id") @db.VarChar(120)
+  googlePayId           String?       @map("google_pay_id") @db.VarChar(120)
+  applePayId            String?       @map("apple_pay_id") @db.VarChar(120)
+  preferredPayoutMethod PayoutMethod? @map("preferred_payout_method")
+  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payment_profiles")
+}
+
+model PaymentProfileAudit {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  changedByUserId String   @map("changed_by_user_id") @db.Uuid
+  changedAt       DateTime @default(now()) @map("changed_at") @db.Timestamptz
+  oldValueJson    Json     @map("old_value_json") @db.JsonB
+  newValueJson    Json     @map("new_value_json") @db.JsonB
+
+  user        User @relation("UserAudit", fields: [userId], references: [id], onDelete: Cascade)
+  changedBy   User @relation("ChangedByAudit", fields: [changedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([userId, changedAt(sort: Desc)])
+  @@map("payment_profile_audit")
+}
