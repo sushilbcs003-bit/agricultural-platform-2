@@ -3367,27 +3367,69 @@ app.get('/api/suppliers', async (req, res) => {
   try {
     const suppliers = await prisma.user.findMany({
       where: { role: 'SUPPLIER' },
-      include: { supplierProfile: { include: { supplierTypes: { include: { typeMaster: true } } } } }
+      include: { 
+        supplierProfile: { 
+          include: { 
+            supplierTypes: { 
+              include: { 
+                typeMaster: true 
+              } 
+            },
+            address: {
+              include: {
+                village: {
+                  include: {
+                    tehsil: {
+                      include: {
+                        district: {
+                          include: {
+                            state: true
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                district: {
+                  include: {
+                    state: true
+                  }
+                },
+                state: true
+              }
+            }
+          } 
+        } 
+      }
     });
     const availableSuppliers = suppliers
       .filter(s => s.supplierProfile && s.supplierProfile.supplierTypes?.length > 0)
-      .map(supplier => ({
-        id: supplier.id,
-        name: supplier.name || supplier.supplierProfile?.organizationName,
-        organizationName: supplier.supplierProfile?.organizationName,
-        contactName: supplier.supplierProfile?.contactName,
-        phone: supplier.phone,
-        email: supplier.email,
-        gstNumber: supplier.supplierProfile?.gstNumber || supplier.gst,
-        businessAddress: supplier.supplierProfile?.address?.line1,
-        village: null,
-        tehsil: null,
-        district: null,
-        state: supplier.supplierProfile?.state,
-        pincode: supplier.supplierProfile?.pincode,
-        supplierTypes: supplier.supplierProfile?.supplierTypes?.map(st => st.typeMaster?.code) || [],
-        createdAt: supplier.createdAt
-      }));
+      .map(supplier => {
+        const address = supplier.supplierProfile?.address;
+        // Extract location from address hierarchy
+        const village = address?.village?.name || null;
+        const tehsil = address?.tehsil?.name || address?.village?.tehsil?.name || null;
+        const district = address?.district?.name || address?.village?.tehsil?.district?.name || null;
+        const state = address?.state?.name || address?.district?.state?.name || address?.village?.tehsil?.district?.state?.name || null;
+        
+        return {
+          id: supplier.id,
+          name: supplier.name || supplier.supplierProfile?.organizationName,
+          organizationName: supplier.supplierProfile?.organizationName,
+          contactName: supplier.supplierProfile?.contactName,
+          phone: supplier.phone,
+          email: supplier.email,
+          gstNumber: supplier.supplierProfile?.gstNumber || supplier.gst,
+          businessAddress: address?.line1 || null,
+          village: village,
+          tehsil: tehsil,
+          district: district,
+          state: state,
+          pincode: address?.pincode || null,
+          supplierTypes: supplier.supplierProfile?.supplierTypes?.map(st => st.typeMaster?.name || st.typeMaster?.code) || [],
+          createdAt: supplier.createdAt
+        };
+      });
     res.json({
       success: true,
       suppliers: availableSuppliers,

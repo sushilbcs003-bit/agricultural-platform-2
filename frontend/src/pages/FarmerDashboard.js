@@ -3482,7 +3482,11 @@ const FarmerDashboard = ({ user, onLogout }) => {
                 'LABOUR': 'Labour Services',
                 'LABOUR_SERVICES': 'Labour Services',
                 'SEEDS': 'Seeds',
-                'FERTILIZERS': 'Fertilizers'
+                'FERTILIZERS': 'Fertilizers',
+                'FARMING_MACHINERY': 'Farming Machinery',
+                'TRANSPORT_MACHINERY': 'Transport Machinery',
+                'Farming Machinery': 'Farming Machinery',
+                'Transport Machinery': 'Transport Machinery'
               };
               
               return (
