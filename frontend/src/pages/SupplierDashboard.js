@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import HomeDashboard from './HomeDashboard';
-import { getSupplierProfile, getSupplierMachinery, updateSupplierProfile } from '../utils/api';
+import { getSupplierProfile, getSupplierMachinery, updateSupplierProfile, getSupplierTypeMaster } from '../utils/api';
 import { getStoredLanguage, saveLanguage, t as translate } from '../utils/language';
 
 const SupplierDashboard = ({ user, onLogout }) => {
@@ -35,9 +35,12 @@ const SupplierDashboard = ({ user, onLogout }) => {
     supplierTypes: []
   });
   
+  // Supplier type master (for Edit Profile - services offered)
+  const [typeMasterList, setTypeMasterList] = useState([]);
   // Machinery state
   const [machinery, setMachinery] = useState([]);
   const [activeMachineryType, setActiveMachineryType] = useState('farming'); // 'farming' or 'transport'
+  const [activeServiceTab, setActiveServiceTab] = useState(null); // code: FARMING_MACHINERY, TRANSPORT_MACHINERY, LABOUR_SERVICES
   const [showMachineryModal, setShowMachineryModal] = useState(false);
   const [editingMachinery, setEditingMachinery] = useState(null);
   const [machineryForm, setMachineryForm] = useState({
@@ -57,9 +60,14 @@ const SupplierDashboard = ({ user, onLogout }) => {
   const [orders, setOrders] = useState([]);
   
   useEffect(() => {
-    // Load supplier data
     loadSupplierData();
   }, [user]);
+
+  useEffect(() => {
+    getSupplierTypeMaster().then(res => {
+      if (res?.success && res?.types) setTypeMasterList(res.types);
+    }).catch(() => {});
+  }, []);
   
   const loadSupplierData = async () => {
     const supplierId = user?.user?.id || user?.id;
@@ -73,6 +81,10 @@ const SupplierDashboard = ({ user, onLogout }) => {
       if (profileRes?.success && profileRes?.supplier) {
         const s = profileRes.supplier;
         const sp = s.supplierProfile || {};
+        const types = (sp.supplierTypes || []).map(st => ({
+          code: st?.typeMaster?.code || st,
+          name: st?.typeMaster?.name || (st?.typeMaster?.code || st)?.replace(/_/g, ' ') || String(st)
+        }));
         setProfile({
           organizationName: sp.organizationName || s.name,
           contactName: sp.contactName || s.name,
@@ -80,9 +92,8 @@ const SupplierDashboard = ({ user, onLogout }) => {
           email: s.email,
           gstNumber: sp.gstNumber || s.gst,
           website: sp.website,
-          supplierTypes: sp.supplierTypes?.map(st => st?.typeMaster?.code || st) || [],
+          supplierTypes: types,
           registeredOn: s.createdAt,
-          // Address details from registration
           businessAddress: sp.businessAddress,
           village: sp.village,
           tehsil: sp.tehsil,
@@ -90,6 +101,7 @@ const SupplierDashboard = ({ user, onLogout }) => {
           state: sp.state,
           pincode: sp.pincode
         });
+        if (types.length > 0) setActiveServiceTab(prev => (prev && types.some(t => t.code === prev)) ? prev : types[0].code);
       }
       if (machineryRes?.success && machineryRes?.machinery) {
         setMachinery(machineryRes.machinery);
@@ -106,10 +118,10 @@ const SupplierDashboard = ({ user, onLogout }) => {
     }
   };
   
-  // Bottom navigation items (mobile-first)
+  const serviceNavLabel = profile?.supplierTypes?.length > 0 ? t('Services', 'सेवाएं') : t('Market', 'बाज़ार');
   const bottomNavItems = [
     { id: 'home', label: t('Home', 'होम'), icon: '🏠' },
-    { id: 'machinery', label: t('Market', 'बाज़ार'), icon: '🛒' },
+    { id: 'machinery', label: serviceNavLabel, icon: '🛒' },
     { id: 'learn', label: t('Learn', 'सीखें'), icon: '📚' },
     { id: 'community', label: t('Community', 'समुदाय'), icon: '👥' },
     { id: 'profile', label: t('Profile', 'प्रोफ़ाइल'), icon: '👤' }
@@ -118,7 +130,7 @@ const SupplierDashboard = ({ user, onLogout }) => {
   const menuItems = [
     { id: 'home', label: t('Home', 'होम'), icon: '🏠' },
     { id: 'profile', label: t('Profile', 'प्रोफ़ाइल'), icon: '👤' },
-    { id: 'machinery', label: t('Machinery', 'मशीनरी'), icon: '🚜' },
+    { id: 'machinery', label: profile?.supplierTypes?.length > 0 ? t('Services', 'सेवाएं') : t('Machinery', 'मशीनरी'), icon: '🚜' },
     { id: 'orders', label: t('Orders', 'ऑर्डर'), icon: '📦' }
   ];
   
@@ -148,12 +160,17 @@ const SupplierDashboard = ({ user, onLogout }) => {
           tehsil: profileForm.tehsil || null,
           district: profileForm.district || null,
           state: profileForm.state || null,
-          pincode: profileForm.pincode || null
+          pincode: profileForm.pincode || null,
+          supplierTypes: Array.isArray(profileForm.supplierTypes) ? profileForm.supplierTypes : []
         }
       });
       if (res?.success && res?.supplier) {
         const s = res.supplier;
         const sp = s.supplierProfile || {};
+        const types = (sp.supplierTypes || []).map(st => ({
+          code: st?.typeMaster?.code || st,
+          name: st?.typeMaster?.name || (st?.typeMaster?.code || st)?.replace(/_/g, ' ') || String(st)
+        }));
         setProfile({
           ...profile,
           email: s.email,
@@ -163,8 +180,14 @@ const SupplierDashboard = ({ user, onLogout }) => {
           tehsil: sp.tehsil,
           district: sp.district,
           state: sp.state,
-          pincode: sp.pincode
+          pincode: sp.pincode,
+          supplierTypes: types
         });
+        if (types.length > 0) {
+          setActiveServiceTab(prev => (prev && types.some(t => t.code === prev)) ? prev : types[0].code);
+        } else {
+          setActiveServiceTab(null);
+        }
       }
       setIsEditingProfile(false);
       alert('Profile updated successfully!');
@@ -258,7 +281,7 @@ const SupplierDashboard = ({ user, onLogout }) => {
                 state: profile?.state || '',
                 pincode: profile?.pincode || '',
                 website: profile?.website || '',
-                supplierTypes: profile?.supplierTypes || []
+                supplierTypes: (profile?.supplierTypes || []).map(t => (t && t.code) ? t.code : t)
               });
               setIsEditingProfile(true);
             }}
@@ -389,6 +412,31 @@ const SupplierDashboard = ({ user, onLogout }) => {
                 placeholder="https://www.example.com"
               />
             </div>
+            <div className="form-group full-width">
+              <label>Services you provide</label>
+              <div className="profile-form-checkboxes" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.5rem' }}>
+                {(typeMasterList.length ? typeMasterList : [
+                  { code: 'FARMING_MACHINERY', name: 'Farming Machinery' },
+                  { code: 'TRANSPORT_MACHINERY', name: 'Transport Machinery' },
+                  { code: 'LABOUR_SERVICES', name: 'Labour Services' }
+                ]).map(type => (
+                  <label key={type.code} className="toggle-label" style={{ marginRight: '1rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={(profileForm.supplierTypes || []).includes(type.code)}
+                      onChange={(e) => {
+                        const prev = profileForm.supplierTypes || [];
+                        const next = e.target.checked
+                          ? [...prev, type.code]
+                          : prev.filter(c => c !== type.code);
+                        setProfileForm({ ...profileForm, supplierTypes: next });
+                      }}
+                    />
+                    <span>{type.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="section-actions">
             <button className="btn btn-outline" onClick={() => setIsEditingProfile(false)}>
@@ -479,16 +527,18 @@ const SupplierDashboard = ({ user, onLogout }) => {
           </div>
           
           <div className="profile-card">
-            <h4>Supplier Types</h4>
+            <h4>Services provided</h4>
             <div className="profile-info">
               {profile?.supplierTypes && profile.supplierTypes.length > 0 ? (
-                profile.supplierTypes.map(type => (
-                  <div key={type} className="badge badge-primary">
-                    {type.replace('_', ' ')}
-                  </div>
-                ))
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  {profile.supplierTypes.map(t => (
+                    <span key={t.code || t} className="badge badge-primary">
+                      {typeof t === 'object' && t.name ? t.name : String(t).replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
               ) : (
-                <span>N/A</span>
+                <span>No services added yet. Edit profile to add services you provide.</span>
               )}
             </div>
           </div>
@@ -509,43 +559,67 @@ const SupplierDashboard = ({ user, onLogout }) => {
   );
   
   const renderMachinery = () => {
-    const filteredMachinery = machinery.filter(m => 
-      activeMachineryType === 'farming' ? m.category === 'FARMING' : m.category === 'TRANSPORT'
-    );
-    
+    const serviceTypes = profile?.supplierTypes || [];
+    const isMachineryTab = activeServiceTab === 'FARMING_MACHINERY' || activeServiceTab === 'TRANSPORT_MACHINERY';
+    const categoryForTab = activeServiceTab === 'FARMING_MACHINERY' ? 'FARMING' : activeServiceTab === 'TRANSPORT_MACHINERY' ? 'TRANSPORT' : null;
+    const filteredMachinery = categoryForTab ? machinery.filter(m => m.category === categoryForTab) : [];
+    const activeTabIsFarming = activeServiceTab === 'FARMING_MACHINERY';
+    const activeTabIsTransport = activeServiceTab === 'TRANSPORT_MACHINERY';
+
     return (
       <div className="dashboard-section">
         <div className="section-header">
           <div>
-            <h3>Machinery Management</h3>
-            <p className="section-subtitle">Manage your farming and transport machinery inventory</p>
+            <h3>{serviceTypes.length > 0 ? t('Services', 'सेवाएं') : 'Machinery Management'}</h3>
+            <p className="section-subtitle">
+              {serviceTypes.length > 0
+                ? t('Manage inventory for each service you provide', 'आप जो सेवाएं देते हैं उनके लिए इन्वेंटरी प्रबंधित करें')
+                : 'Manage your farming and transport machinery inventory'}
+            </p>
           </div>
-          <button className="btn btn-primary" onClick={handleAddMachinery}>
-            + Add Machinery
-          </button>
+          {isMachineryTab && (
+            <button className="btn btn-primary" onClick={handleAddMachinery}>
+              + Add Machinery
+            </button>
+          )}
         </div>
         
         <div className="supplier-machinery-section">
+          {serviceTypes.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">🛒</div>
+              <p>{t('Add services you provide in your Profile to see tabs here.', 'अपनी प्रोफ़ाइल में वे सेवाएं जोड़ें जो आप देते हैं।')}</p>
+              <button className="btn btn-primary" onClick={() => setActiveSection('profile')}>
+                {t('Go to Profile', 'प्रोफ़ाइल पर जाएं')}
+              </button>
+            </div>
+          ) : (
+            <>
           <div className="machinery-type-tabs">
-            <button
-              className={`machinery-type-tab ${activeMachineryType === 'farming' ? 'active' : ''}`}
-              onClick={() => setActiveMachineryType('farming')}
-            >
-              🚜 Farming Machinery
-            </button>
-            <button
-              className={`machinery-type-tab ${activeMachineryType === 'transport' ? 'active' : ''}`}
-              onClick={() => setActiveMachineryType('transport')}
-            >
-              🚚 Transport Machinery
-            </button>
+            {serviceTypes.map(t => (
+              <button
+                key={t.code}
+                className={`machinery-type-tab ${activeServiceTab === t.code ? 'active' : ''}`}
+                onClick={() => { setActiveServiceTab(t.code); setActiveMachineryType(t.code === 'TRANSPORT_MACHINERY' ? 'transport' : 'farming'); }}
+              >
+                {t.code === 'FARMING_MACHINERY' && '🚜 '}
+                {t.code === 'TRANSPORT_MACHINERY' && '🚚 '}
+                {t.code === 'LABOUR_SERVICES' && '👷 '}
+                {typeof t === 'object' && t.name ? t.name : String(t).replace(/_/g, ' ')}
+              </button>
+            ))}
           </div>
           
-          {filteredMachinery.length === 0 ? (
+          {activeServiceTab === 'LABOUR_SERVICES' ? (
+            <div className="empty-state">
+              <div className="empty-icon">👷</div>
+              <p>{t('Labour services management coming soon.', 'श्रम सेवा प्रबंधन जल्द ही।')}</p>
+            </div>
+          ) : filteredMachinery.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">🚜</div>
-              <p>No {activeMachineryType} machinery added yet</p>
-              <button className="btn btn-primary" onClick={handleAddMachinery}>
+              <p>No {activeTabIsFarming ? 'farming' : 'transport'} machinery added yet</p>
+              <button className="btn btn-primary" onClick={() => { setActiveMachineryType(activeTabIsFarming ? 'farming' : 'transport'); handleAddMachinery(); }}>
                 Add Your First Machinery
               </button>
             </div>
@@ -608,6 +682,8 @@ const SupplierDashboard = ({ user, onLogout }) => {
                 </div>
               ))}
             </div>
+          )}
+            </>
           )}
         </div>
         

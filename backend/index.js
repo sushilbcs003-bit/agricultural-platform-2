@@ -3217,6 +3217,19 @@ app.get('/api/farmers', async (req, res) => {
 // Get suppliers with available services
 // Supplier Portal APIs - Using Prisma (database, not in-memory)
 
+// Get all supplier type master (for Edit Profile - add services)
+app.get('/api/supplier-type-master', async (req, res) => {
+  try {
+    const types = await prisma.supplierTypeMaster.findMany({
+      orderBy: { code: 'asc' }
+    });
+    res.json({ success: true, types });
+  } catch (error) {
+    logger.error('Error fetching supplier type master:', error);
+    res.status(500).json({ success: false, error: { message: 'Failed to fetch types' } });
+  }
+});
+
 // Get supplier profile
 app.get('/api/supplier/:supplierId/profile', async (req, res) => {
   try {
@@ -3310,9 +3323,23 @@ app.put('/api/supplier/:supplierId/profile', async (req, res) => {
         logger.debug('Supplier address update skipped:', addrErr?.message);
       }
     }
+    // Update supplier types (services offered) if provided
+    if (Array.isArray(sp.supplierTypes)) {
+      const codeMap = { TRANSPORT: 'TRANSPORT_MACHINERY', MACHINERY: 'FARMING_MACHINERY', LABOUR: 'LABOUR_SERVICES' };
+      const dbCodes = sp.supplierTypes
+        .map(t => (typeof t === 'string' ? codeMap[t] || t : t))
+        .filter(Boolean);
+      await prisma.supplierType.deleteMany({ where: { supplierUserId: supplierId } });
+      if (dbCodes.length > 0) {
+        const typeMasters = await prisma.supplierTypeMaster.findMany({ where: { code: { in: dbCodes } } });
+        await prisma.supplierType.createMany({
+          data: typeMasters.map(tm => ({ supplierUserId: supplierId, supplierTypeId: tm.id }))
+        });
+      }
+    }
     const updated = await prisma.user.findUnique({
       where: { id: supplierId },
-      include: { supplierProfile: true }
+      include: { supplierProfile: { include: { supplierTypes: { include: { typeMaster: true } } } } }
     });
     // Re-fetch with address for response
     let supplierWithAddress = updated;

@@ -212,6 +212,11 @@ export const bulkUpdateProductStatus = async (farmerId, productIds, status) => {
 // ==========================================================
 
 // Supplier APIs
+export const getSupplierTypeMaster = async () => {
+  const response = await api.get('/api/supplier-type-master');
+  return response.data;
+};
+
 export const getSupplierProfile = async (supplierId) => {
   return apiCallWithFallback('get',
     `${API_VERSION}/supplier/${supplierId}/profile`,
