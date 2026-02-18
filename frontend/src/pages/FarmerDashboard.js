@@ -3505,7 +3505,12 @@ const FarmerDashboard = ({ user, onLogout }) => {
                   )}
                   
                   <div className="farmer-location">
-                    📍 {supplier.village || 'N/A'}, {supplier.district || 'N/A'}, {supplier.state || 'N/A'}
+                    📍 {[
+                      supplier.village,
+                      supplier.tehsil,
+                      supplier.district,
+                      supplier.state
+                    ].filter(Boolean).join(', ') || 'Location not available'}
                   </div>
                   
                   {supplier.phone && (
